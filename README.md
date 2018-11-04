@@ -47,8 +47,8 @@ loss=2.346 | ε=0.04999916370086185 | 8500
 loss=0.638 | ε=0.04999916370086185 | 9000
 loss=1.454 | ε=0.04999916370086185 | 9500
 ---- trained
-1: 30/0 > deffence
-2: 30/0 > deffence
+1: 30/0 > defence
+2: 30/0 > defence
 1: 30/1 > do-nothing
 2: 30/1 > do-nothing
 1: 30/3 > attack
@@ -58,9 +58,9 @@ loss=1.454 | ε=0.04999916370086185 | 9500
 > 1's life: 30 -> 28
 1: 28/1 > quick-attack
 > 2's life: 25 -> 23
-2: 23/4 > deffence
+2: 23/4 > defence
 1: 28/0 > do-nothing
-2: 23/5 > deffence
+2: 23/5 > defence
 1: 28/2 > do-nothing
 2: 23/6 > quick-attack
 > 1's life: 28 -> 26
@@ -72,28 +72,28 @@ loss=1.454 | ε=0.04999916370086185 | 9500
 > 2's life: 18 -> 13
 2: 13/3 > attack
 > 1's life: 21 -> 16
-1: 16/0 > deffence
-2: 13/1 > deffence
+1: 16/0 > defence
+2: 13/1 > defence
 1: 16/1 > do-nothing
-2: 13/2 > deffence
+2: 13/2 > defence
 2: 13/3 > do-nothing
 1: 16/3 > attack
 > 2's life: 13 -> 8
 2: 8/5 > do-nothing
 1: 16/1 > quick-attack
 > 2's life: 8 -> 6
-1: 16/0 > deffence
+1: 16/0 > defence
 2: 6/7 > attack
 > 1's life: 16 -> 15
 1: 15/1 > quick-attack
 > 2's life: 6 -> 4
 2: 4/5 > do-nothing
-1: 15/0 > deffence
+1: 15/0 > defence
 1: 15/1 > quick-attack
 > 2's life: 4 -> 2
 2: 2/7 > attack
 > 1's life: 15 -> 10
-1: 10/0 > deffence
+1: 10/0 > defence
 2: 2/5 > quick-attack
 > no damage!
 1: 10/1 > quick-attack
@@ -101,20 +101,20 @@ loss=1.454 | ε=0.04999916370086185 | 9500
 
 -----
 
-1: 30/0 > deffence
+1: 30/0 > defence
 2: 30/0 > do-nothing
 1: 30/1 > quick-attack
 > 2's life: 30 -> 28
-2: 28/2 > deffence
+2: 28/2 > defence
 1: 30/0 > do-nothing
-2: 28/3 > deffence
+2: 28/3 > defence
 1: 30/2 > do-nothing
 2: 28/4 > do-nothing
 1: 30/4 > attack
 > 2's life: 28 -> 23
 2: 23/6 > quick-attack
 > 1's life: 30 -> 28
-2: 23/5 > deffence
+2: 23/5 > defence
 1: 28/2 > do-nothing
 2: 23/6 > quick-attack
 > 1's life: 28 -> 26
@@ -142,7 +142,7 @@ loss=1.454 | ε=0.04999916370086185 | 9500
 > 2's life: 8 -> 3
 2: 3/3 > attack
 > 1's life: 13 -> 8
-1: 8/0 > deffence
+1: 8/0 > defence
 2: 3/1 > attack
 Failed: 2's attack
 1: 8/1 > quick-attack

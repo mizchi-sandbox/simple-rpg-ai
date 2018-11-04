@@ -44,7 +44,7 @@ export const $actionData: ActionData[] = [
   },
   {
     id: 2,
-    type: "deffence",
+    type: "defence",
     cooldown: 3,
     damage: 0,
     defence: 4,
