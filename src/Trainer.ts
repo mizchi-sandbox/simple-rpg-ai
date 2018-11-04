@@ -1,15 +1,25 @@
 import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-node-gpu";
-import { range, sampleSize } from "lodash";
-import { $actionData, ActionData, Env } from "./env";
+import buildModel from "./buildModel";
+import { sampleSize, maxBy } from "lodash";
+import {
+  $actionData,
+  ActionData,
+  Env,
+  applyActionToEnv,
+  PLAYER_ID,
+  judgeWinner
+} from "./env";
 
 const REWARD_GAMMA = 0.9;
-const EPSILON_MIN = 0.01;
-const EPSILON_DECAY = 0.9999;
+const EPSILON_MIN = 0.05;
+const EPSILON_DECAY = 0.9995;
 
 type Memory = {
-  inputs: number[];
-  result: [boolean, number]; // done, reward
+  env: Env;
+  actorId: number;
+  actionId: number;
+  reward: number;
 };
 
 export default class Trainer {
@@ -23,93 +33,133 @@ export default class Trainer {
     this.epsilon = 1.0;
   }
 
-  rememberMemory(env: Env, action: ActionData, done: boolean, reward: number) {
+  rememberMemory(env: Env, actorId: number, actionId: number, reward: number) {
     this.memory.push({
-      inputs: [
-        env.player.life,
-        env.player.cooldown,
-        env.player.charge,
-        env.enemy.life,
-        env.enemy.cooldown,
-        env.enemy.charge,
-        env.enemy.defence,
-        ...serializeAction(action)
-      ],
-      result: [true, reward]
+      env,
+      actorId,
+      actionId,
+      reward
     });
   }
 
-  chooseAction() {
-    if (this.epsilon < Math.random()) {
+  chooseAction(env: Env) {
+    const e = Math.max(this.epsilon, EPSILON_MIN);
+    if (e > Math.random()) {
       return this.chooseRandomAction();
     } else {
-      // TODO
-      return this.chooseBestAction();
+      return this.chooseBestAction(env);
     }
   }
 
   chooseRandomAction() {
-    return Math.floor(Math.random() * 4);
+    return Math.floor(Math.random() * $actionData.length);
   }
 
-  chooseBestAction() {
+  chooseBestAction(env: Env, actorId: number = PLAYER_ID): number {
     // TODO
-    return Math.floor(Math.random() * 4);
+
+    // Filter canExec
+    const ret = $actionData.map(action => {
+      if (env.player.charge + action.charge >= 0) {
+        const pred: any = this.model.predict([
+          tf.tensor2d([serializeState(env, action)])
+        ]);
+        return {
+          id: action.id,
+          reward: pred.dataSync()[0]
+        };
+      }
+      return {
+        id: action.id,
+        reward: -1
+      };
+    });
+    const selected: any = maxBy(ret, i => i.reward);
+    if (selected) {
+      return selected.id;
+    } else {
+      return this.chooseRandomAction();
+    }
   }
 
-  getReward(env: Env) {
+  // TODO Take actorId
+  getEnvReward(env: Env): number {
     // enemy dead
     if (env.enemy.life <= 0) {
-      return 1000;
+      return 100;
     }
 
     // player dead penalty
     if (env.player.life <= 0) {
-      return -1000;
+      return -100;
     }
 
-    // better
-    if (env.player.life >= env.enemy.life) {
+    return env.player.life >= env.enemy.life ? +1 : -1;
+  }
+
+  // TODO Take actorId
+  getActionReward(env: Env, actionId: number): number {
+    const nextEnv = applyActionToEnv(env, PLAYER_ID, actionId);
+    if (nextEnv.enemy.life <= 0) {
+      return 100;
+    }
+
+    if (env.enemy.life > nextEnv.enemy.life) {
       return 1;
     }
     return 0;
+    // return this.getEnvReward(nextEnv);
   }
 
-  replayExperience(batchSize: number = 32) {
-    const batchSize_ = Math.min(batchSize, this.memory.length);
-    const minibatch = sampleSize(this.memory, batchSize_);
+  async replayExperience(defaultBatchSize: number = 32, count: number) {
+    const batchSize = Math.min(defaultBatchSize, this.memory.length);
+    const minibatch = sampleSize(this.memory, batchSize);
 
     const xs = [];
     const ys = [];
 
-    for (const i in range(batchSize_)) {
-      const { inputs, result } = minibatch[i];
+    for (const memory of minibatch) {
+      const nextEnv = applyActionToEnv(
+        memory.env,
+        memory.actorId,
+        memory.actionId
+      );
+      const reward = memory.reward;
+      const winnerId = judgeWinner(nextEnv);
 
-      const [done, reward] = result;
-      let targetF = reward;
+      let targetF = memory.reward;
 
-      if (!done) {
+      if (winnerId == null) {
         const rewards: number[] = $actionData.map(a => {
-          // TODO: predict
-          // return this.model.predict([]);
-          const pred: any = this.model.predict([]);
+          const predictedEnv = applyActionToEnv(nextEnv, PLAYER_ID, a.id);
+          const action = $actionData[a.id];
+          const pred: any = this.model.predict(
+            tf.tensor2d([serializeState(predictedEnv, action)])
+          );
           return pred.dataSync()[0];
         });
         const maxReward = Math.max(...rewards);
         targetF = reward + REWARD_GAMMA * maxReward;
       }
 
-      xs.push(inputs);
-      ys.push(targetF);
+      xs.push(serializeState(nextEnv, $actionData[memory.actionId]));
+      ys.push([targetF]);
     }
 
-    this.model.fit(tf.tensor2d(xs), tf.tensor2d(ys), {
-      epochs: 1
-      // callbacks: {
-      //   onEpochEnd: async (epoch: any, log: any) => {
-      //     console.log(`Epoch ${epoch}: loss = ${log.loss}`);
-      //   }
-      // }
+    await this.model.fit(tf.tensor2d(xs), tf.tensor2d(ys), {
+      epochs: 1,
+      verbose: 0,
+      callbacks: {
+        onEpochEnd: async (epoch: any, log: any) => {
+          if (count % 500 === 0) {
+            console.log(
+              `loss=${Math.floor(log.loss * 1000) / 1000} | ε=${
+                this.epsilon
+              } | ${count}`
+            );
+          }
+        }
+      }
     });
 
     // Decay epsilon
@@ -119,40 +169,42 @@ export default class Trainer {
   }
 }
 
-export function buildModel() {
-  const model = tf.sequential();
-  model.add(
-    tf.layers.dense({ units: 20, activation: "relu", inputShape: [3, 4, 4] })
-  );
-  model.add(tf.layers.flatten());
-  model.add(
-    tf.layers.dense({
-      units: 20,
-      activation: "relu",
-      inputShape: [1]
-    })
-  );
-  model.add(
-    tf.layers.dense({
-      units: 20,
-      activation: "relu"
-    })
-  );
-  model.add(
-    tf.layers.dense({
-      units: 1,
-      activation: "linear"
-    })
-  );
-
-  model.compile({ optimizer: "sgd", loss: "meanSquaredError" });
-  return model;
+function serializeState(env: Env, action: ActionData): number[] {
+  return [...serializeEnv(env), ...serializeAction(action.id)];
 }
 
-export function serializeAction(data: ActionData): number[] {
+type SeriarizedAction = [
+  // number /* actionId */
+  number /* damage */,
+  number /* defence */,
+  number /* cooldown */,
+  number /* charge */
+];
+
+function serializeAction(actionId: number): SeriarizedAction {
+  // return [actionId];
+  const data = $actionData[actionId];
   return [data.damage, data.defence, data.cooldown, data.charge];
 }
 
-export function selectRandomAction() {
-  return Math.floor(Math.random() * 4);
+type SeriarizedEnv = [
+  // number /* self.life */,
+  // number /* self.cooldown */,
+  number /* self.charge */,
+  // number /* other.life */,
+  number /* other.cooldown */,
+  number /* other.charge */,
+  number /* other.defence */
+];
+
+function serializeEnv(env: Env): SeriarizedEnv {
+  return [
+    // env.player.life,
+    // env.player.cooldown,
+    env.player.charge,
+    // env.enemy.life,
+    env.enemy.cooldown,
+    env.enemy.charge,
+    env.enemy.defence
+  ];
 }

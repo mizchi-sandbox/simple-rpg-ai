@@ -68,6 +68,7 @@ async function run() {
     const real = fn(input[0], input[1]);
     console.log("in", input, "pred", pred.dataSync()[0], "real", real);
   });
+  await model.save(__dirname + "/model.json");
 }
 
 run();

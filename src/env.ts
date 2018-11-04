@@ -17,6 +17,7 @@ export type Battler = {
 };
 
 export type ActionData = {
+  id: number;
   type: string;
   cooldown: number;
   damage: number;
@@ -26,6 +27,7 @@ export type ActionData = {
 
 export const $actionData: ActionData[] = [
   {
+    id: 0,
     type: "attack",
     cooldown: 5,
     damage: 5,
@@ -33,6 +35,7 @@ export const $actionData: ActionData[] = [
     charge: -2
   },
   {
+    id: 1,
     type: "quick-attack",
     cooldown: 2,
     damage: 2,
@@ -40,6 +43,7 @@ export const $actionData: ActionData[] = [
     charge: -1
   },
   {
+    id: 2,
     type: "deffence",
     cooldown: 3,
     damage: 0,
@@ -47,6 +51,7 @@ export const $actionData: ActionData[] = [
     charge: +1
   },
   {
+    id: 3,
     type: "do-nothing",
     cooldown: 4,
     damage: 0,
@@ -54,6 +59,11 @@ export const $actionData: ActionData[] = [
     charge: +2
   }
 ];
+
+const DEBUG = true;
+const log = (...args: any): void => {
+  DEBUG && console.log(...args);
+};
 
 export function createEnv(): Env {
   return {
@@ -65,18 +75,62 @@ export function createEnv(): Env {
 function createBattler(id: number): Battler {
   return {
     id,
-    life: 100,
+    life: 30,
     cooldown: 0,
     charge: 0,
     defence: 0
   };
 }
 
+export function applyActionToEnv(
+  env: Env,
+  actorId: number,
+  actionId: number,
+  DEBUG: boolean = false
+): Env {
+  let newEnv = clone(env);
+  const battlers = [newEnv.player, newEnv.enemy];
+
+  const self = battlers.find(b => b.id === actorId);
+  const other = battlers.find(b => b.id !== actorId);
+  const action = $actionData[actionId];
+
+  if (self && other) {
+    DEBUG && log(`${actorId}: ${self.life}/${self.charge} > ${action.type}`);
+
+    const canExec = action.charge + self.charge >= 0;
+    if (canExec) {
+      const penetratedDamage = Math.max(0, action.damage - other.defence);
+
+      if (penetratedDamage > 0) {
+        const beforeLife = other.life;
+        other.life -= penetratedDamage;
+        DEBUG && log(`> ${other.id}'s life: ${beforeLife} -> ${other.life}`);
+      } else if (action.damage > 0) {
+        DEBUG && log("> no damage!");
+      }
+      self.cooldown = action.cooldown;
+      self.defence = action.defence;
+      self.charge += action.charge;
+    } else {
+      DEBUG && log(`Failed: ${self.id}'s ${action.type}`);
+      // fallback to do-nothing
+      self.cooldown = action.cooldown;
+      self.charge += 1;
+    }
+  }
+
+  return newEnv;
+}
+
 export function processTurn(
   env: Env,
-  onSelectAction: (battlerId: number) => number
+  opts: {
+    onSelectAction: (battlerId: number) => number;
+  },
+  DEBUG: boolean = false
 ): Env {
-  const newEnv = clone(env);
+  let newEnv = clone(env);
   const battlers = [newEnv.player, newEnv.enemy];
 
   battlers.forEach(self => {
@@ -89,38 +143,8 @@ export function processTurn(
     } else {
       // reset defence
       self.defence = 0;
-      const other = battlers.find(b => b.id !== self.id);
-      const aid = onSelectAction(self.id);
-      const actionData = $actionData[aid];
-      if (other) {
-        console.log(
-          `${self.id}: ${self.life}/${self.charge} > ${actionData.type}`
-        );
-
-        const canExec = actionData.charge + self.charge >= 0;
-        if (canExec) {
-          const penetratedDamage = Math.max(
-            0,
-            actionData.damage - other.defence
-          );
-
-          if (penetratedDamage > 0) {
-            const beforeLife = other.life;
-            other.life -= penetratedDamage;
-            console.log(`> ${other.id}'s life: ${beforeLife} -> ${other.life}`);
-          } else if (actionData.damage > 0) {
-            console.log("> no damage!");
-          }
-          self.cooldown = actionData.cooldown;
-          self.defence = actionData.defence;
-          self.charge += actionData.charge;
-        } else {
-          console.log(`Failed: ${self.id}'s ${actionData.type}`);
-          // fallback to do-nothing
-          self.cooldown = actionData.cooldown;
-          self.charge += 1;
-        }
-      }
+      const aid = opts.onSelectAction(self.id);
+      newEnv = applyActionToEnv(newEnv, self.id, aid, DEBUG);
     }
   });
 
